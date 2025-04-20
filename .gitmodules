@@ -1,0 +1,6 @@
+[submodule "mbed-os"]
+	path = mbed-os
+	url = https://github.com/mbed-ce/mbed-os.git
+[submodule "mbed-http"]
+	path = mbed-http
+	url = https://github.com/mbed-ce-libraries-examples/mbed-http
