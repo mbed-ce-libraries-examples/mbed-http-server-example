@@ -19,7 +19,7 @@ void request_handler(ParsedHttpRequest* request, TCPSocket* socket) {
 
         char response[] = "<html><head><title>Hello from mbed</title></head>"
             "<body>"
-                "<h1>mbed webserver</h1>"
+                "<h1>Mbed OS Webserver</h1>"
                 "<button id=\"toggle\">Toggle LED</button>"
                 "<script>document.querySelector('#toggle').onclick = function() {"
                     "var x = new XMLHttpRequest(); x.open('POST', '/toggle'); x.send();"

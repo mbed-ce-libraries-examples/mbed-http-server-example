@@ -23,6 +23,8 @@
 #include "http_response.h"
 #include "http_response_builder.h"
 
+#include <cinttypes>
+
 // Maximum number of concurrent connections supported
 #ifndef HTTP_SERVER_MAX_CONCURRENT
 #define HTTP_SERVER_MAX_CONCURRENT      5
@@ -93,11 +95,17 @@ private:
             rtos::ScopedMutexLock lock(thread_pool_mutex);
             auto mapIter = sockets_and_threads.find(rtos::ThisThread::get_id());
             if(mapIter != sockets_and_threads.end()) {
-                socket = mapIter->second.second.get();
+                socket = mapIter->second.second;
             }
         }
 
         MBED_ASSERT(socket != nullptr);
+
+        SocketAddress peer_addr;
+        if(socket->getpeername(&peer_addr) == NSAPI_ERROR_OK) {
+            printf("Thread 0x%" PRIx32 " started to connect to %s:%" PRIu16 "\n",
+                reinterpret_cast<uint32_t>(rtos::ThisThread::get_id()), peer_addr.get_ip_address(), peer_addr.get_port());
+        }
 
         // needs to keep running until the socket gets closed
         while (1) {
@@ -127,9 +135,13 @@ private:
             if (recv_ret <= 0) {
                 free(recv_buffer);
 
-                // Bail out of the thread if we had an error not related to parsing
-                if (recv_ret < -3000 || recv_ret == 0) {
-                    printf("Error reading from socket %d\n", recv_ret);
+                // Print if we had an error not related to parsing.
+                if (recv_ret < -3000) {
+                    printf("Error reading from socket: %d\n", recv_ret);
+                }
+
+                if(recv_ret == 0 || recv_ret < -3000) {
+                    // If the socket was closed in an orderly way by the other side (0), or we experienced a network error, shut down this thread.
                     break;
                 }
                 else {
@@ -150,6 +162,8 @@ private:
         }
 
         socket->close();
+
+        printf("Thread 0x%" PRIx32 " shut down.\n", reinterpret_cast<uint32_t>(rtos::ThisThread::get_id()));
     }
 
     void main() {
@@ -160,7 +174,7 @@ private:
             SocketAddress peer_addr;
             if(clt_sock->getpeername(&peer_addr) == NSAPI_ERROR_OK)
             {
-                printf("Incoming connection from %s", peer_addr.get_ip_address());
+                printf("Incoming connection from %s:%" PRIu16 "\n", peer_addr.get_ip_address(), peer_addr.get_port());
             }
             else
             {
@@ -178,10 +192,14 @@ private:
             // Next, find and delete any terminated threads.
             // This needs to be done first just in case the new thread got the same ID as a previously
             // terminated thread.
-            for (auto socketThreadIter = sockets_and_threads.begin(); socketThreadIter != sockets_and_threads.end(); socketThreadIter++) {
+            for (auto socketThreadIter = sockets_and_threads.begin(); socketThreadIter != sockets_and_threads.end();) {
                 if (socketThreadIter->second.first->get_state() == Thread::Deleted) {
-                    CriticalSectionLock criticalSection;
+                    //printf("Erasing thread 0x%" PRIx32 "\n", socketThreadIter->first);
                     socketThreadIter = sockets_and_threads.erase(socketThreadIter);
+                }
+                else
+                {
+                    ++socketThreadIter;
                 }
             }
 
@@ -207,8 +225,8 @@ private:
     rtos::Mutex thread_pool_mutex;
 
     // Maps server thread IDs to their thread objects and sockets.
-    // unique_ptrs are used so that the objects will get deleted when the map entry is removed.
-    std::map<osThreadId_t, std::pair<std::unique_ptr<Thread>, std::unique_ptr<TCPSocket>>> sockets_and_threads;
+    // unique_ptrs is used so that the thread will get deleted when the map entry is removed.
+    std::map<osThreadId_t, std::pair<std::unique_ptr<Thread>, TCPSocket *>> sockets_and_threads;
 
     Callback<void(ParsedHttpRequest* request, TCPSocket* socket)> handler;
 };
