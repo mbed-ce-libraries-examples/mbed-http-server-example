@@ -47,7 +47,7 @@ public:
 
     ~HttpServer() {
         // Terminate all currently running threads
-        rtos::ScopedMutexLock lock(threadPoolMutex);
+        rtos::ScopedMutexLock lock(thread_pool_mutex);
 
         main_thread.terminate();
 
@@ -90,7 +90,7 @@ private:
         TCPSocket * socket = nullptr;
 
         {
-            rtos::ScopedMutexLock lock(threadPoolMutex);
+            rtos::ScopedMutexLock lock(thread_pool_mutex);
             auto mapIter = sockets_and_threads.find(rtos::ThisThread::get_id());
             if(mapIter != sockets_and_threads.end()) {
                 socket = mapIter->second.second.get();
@@ -157,22 +157,17 @@ private:
             nsapi_error_t accept_result;
             TCPSocket* clt_sock = server.accept(&accept_result);
 
-            rtos::ScopedMutexLock lock(threadPoolMutex);
+            rtos::ScopedMutexLock lock(thread_pool_mutex);
 
+            // Create new thread
+            Thread* t = nullptr;
             if (clt_sock != nullptr) {
-                // and start listening for events there
-                Thread* t = new Thread(osPriorityNormal, 2048);
-
-                // Store thread and socket pointer in map
-                sockets_and_threads.emplace(t->get_id(), std::make_pair(t, clt_sock));
-
-                t->start(callback(this, &HttpServer::receive_data));
-            }
-            else {
-                printf("Failed to accept connection: %d\n", accept_result);
+                t = new Thread(osPriorityNormal, 2048);
             }
 
-            // Find and delete any terminated threads
+            // Next, find and delete any terminated threads.
+            // This needs to be done first just in case the new thread got the same ID as a previously
+            // terminated thread.
             for (auto socketThreadIter = sockets_and_threads.begin(); socketThreadIter != sockets_and_threads.end(); socketThreadIter++) {
                 if (socketThreadIter->second.first->get_state() == Thread::Deleted) {
                     CriticalSectionLock criticalSection;
@@ -180,6 +175,17 @@ private:
                 }
             }
 
+            // Now, start the thread running. However, note that it won't be able to actually begin executing
+            // until we release the thread_pool_mutex lock.
+            if (clt_sock != nullptr) {
+                t->start(callback(this, &HttpServer::receive_data));
+
+                // Once the thread has been started, store it and the socket in the map by its ID.
+                sockets_and_threads.emplace(t->get_id(), std::make_pair(t, clt_sock));
+            }
+            else {
+                printf("Failed to accept connection: %d\n", accept_result);
+            }
         }
     }
 
@@ -188,7 +194,7 @@ private:
     Thread main_thread;
 
     // Mutex which must be locked to create, delete, or iterate threads
-    rtos::Mutex threadPoolMutex;
+    rtos::Mutex thread_pool_mutex;
 
     // Maps server thread IDs to their thread objects and sockets.
     // unique_ptrs are used so that the objects will get deleted when the map entry is removed.
