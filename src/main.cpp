@@ -61,8 +61,9 @@ int main() {
         return 1;
     }
 
-    HttpServer server(network);
-    nsapi_error_t res = server.start(8080, &request_handler);
+    // Construct a server, allowing it to persist in memory permanently
+    HttpServer * server = new HttpServer(network);
+    nsapi_error_t res = server->start(8080, &request_handler);
 
     if (res == NSAPI_ERROR_OK) {
         SocketAddress ourAddr;
@@ -72,4 +73,6 @@ int main() {
     else {
         printf("Server could not be started... %d\n", res);
     }
+    
+    // Main thread will now exit but server threads keep running
 }

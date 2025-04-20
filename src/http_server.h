@@ -157,6 +157,16 @@ private:
             nsapi_error_t accept_result;
             TCPSocket* clt_sock = server.accept(&accept_result);
 
+            SocketAddress peer_addr;
+            if(clt_sock->getpeername(&peer_addr) == NSAPI_ERROR_OK)
+            {
+                printf("Incoming connection from %s", peer_addr.get_ip_address());
+            }
+            else
+            {
+                printf("Incoming connection, failed to get peer IP");
+            }
+
             rtos::ScopedMutexLock lock(thread_pool_mutex);
 
             // Create new thread
