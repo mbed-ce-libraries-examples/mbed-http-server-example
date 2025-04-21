@@ -55,6 +55,12 @@ int main() {
     //                                 "my network password",
     //                                 NSAPI_SECURITY_WPA2);
 
+    // To use a static IP instead of DHCP, uncomment the below block and fill in IP settings.
+    // const SocketAddress ip(nsapi_addr_t{NSAPI_IPv4, {192, 168, 1, 20}}, 0);
+    // const SocketAddress netmask(nsapi_addr_t{NSAPI_IPv4, {255, 255, 255, 0}}, 0);
+    // const SocketAddress gateway(nsapi_addr_t{NSAPI_IPv4, {192, 168, 1, 1}}, 0);
+    // network->set_network(ip, netmask, gateway);
+
     auto ret = network->connect();
     if(ret != NSAPI_ERROR_OK) {
         printf("Failed to initialize networking. Error: %d", ret);
